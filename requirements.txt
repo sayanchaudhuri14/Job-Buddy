@@ -1,6 +1,6 @@
 streamlit
 langchain
-langchain-openai
+openai
+python-dotenv
 python-docx
-requests
-python-magic
+langchain-community
