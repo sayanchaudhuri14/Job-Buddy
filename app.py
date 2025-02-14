@@ -6,306 +6,432 @@ from resume_generator.resume_chain import generate_resume
 from resume_generator.cover_letter_chain import generate_cover_letter
 from docx import Document
 
-# Initialize session state for form data
+# Page configuration - MUST BE THE FIRST STREAMLIT COMMAND
+st.set_page_config(
+    page_title="Resume Generator",
+    page_icon="📄",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for better styling
+st.markdown("""
+    <style>
+    .stTextInput, .stTextArea {
+        padding: 10px;
+        border-radius: 5px;
+        min-height: 40px;
+    }
+    .stButton button {
+        width: 100%;
+        border-radius: 5px;
+        height: 45px;
+    }
+    .main .block-container {
+        padding-top: 2rem;
+    }
+    .error-msg {
+        color: red;
+        font-weight: bold;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Initialize session states
+if 'show_form' not in st.session_state:
+    st.session_state.show_form = False
 if 'experience_entries' not in st.session_state:
     st.session_state.experience_entries = []
 if 'education_entries' not in st.session_state:
     st.session_state.education_entries = []
-if 'technical_skills' not in st.session_state:
-    st.session_state.technical_skills = []
-if 'languages' not in st.session_state:
-    st.session_state.languages = []
-if 'certifications' not in st.session_state:
-    st.session_state.certifications = []
-if 'patents' not in st.session_state:
-    st.session_state.patents = []
-if 'publications' not in st.session_state:
-    st.session_state.publications = []
+if 'skills_entries' not in st.session_state:
+    st.session_state.skills_entries = []
+if 'projects_entries' not in st.session_state:
+    st.session_state.projects_entries = []
+if 'patents_entries' not in st.session_state:
+    st.session_state.patents_entries = []
+if 'publications_entries' not in st.session_state:
+    st.session_state.publications_entries = []
+if 'courses_entries' not in st.session_state:
+    st.session_state.courses_entries = []
+if 'generated_resume' not in st.session_state:
+    st.session_state.generated_resume = None
+if 'generated_cover_letter' not in st.session_state:
+    st.session_state.generated_cover_letter = None
 
-# Streamlit UI
-st.set_page_config(layout="wide")
-st.title('Resume and Cover Letter Generator')
+# Sidebar with mandatory key details
+with st.sidebar:
+    st.title("📋 Key Details")
+    st.markdown("---")
+    
+    # Personal Information
+    name = st.text_input("Full Name*", key="name", placeholder="John Doe")
+    email = st.text_input("Email Address*", key="email", placeholder="john@example.com")
+    contact = st.text_input("Contact Number*", key="contact", placeholder="+1 (123) 456-7890")
+    
+    st.markdown("### Professional Profiles")
+    linkedin = st.text_input("LinkedIn Profile", key="linkedin", placeholder="linkedin.com/in/johndoe")
+    github = st.text_input("GitHub Profile", key="github", placeholder="github.com/johndoe")
+    other_links = st.text_area("Other Links", key="other_links", 
+                              placeholder="Portfolio, Blog, etc.",
+                              height=100)
+    
+    st.markdown("### Target Company")
+    company_name = st.text_input("Company Name*", key="company_name", placeholder="Target Company Inc.")
+    
+    st.markdown("---")
+    st.markdown("*Required fields")
 
-st.markdown("## Enter Your Information")
+# Main content
+st.title('🚀 Resume and Cover Letter Generator')
+st.markdown("Create your professional resume and cover letter tailored to your target job.")
 
-# Create a container for the 'Enter Your Information' form
-with st.expander("Enter here", expanded=False):
-    # Collecting Personal Information
-    name = st.text_input("Name (Required)", key="name")
-    contact = st.text_input("Contact Number (Required)", key="contact")
-    email = st.text_input("Email Address (Required)", key="email")
-    address = st.text_input("Address (Required)", key="address")
+# Key details dictionary
+key_details = {
+    "name": name,
+    "contact": contact,
+    "email": email,
+    "linkedin": linkedin,
+    "github": github,
+    "other_links": other_links,
+    "company_name": company_name,
+}
 
-    # Collecting optional Links
-    linkedin = st.text_input("LinkedIn Link", key="linkedin")
-    github = st.text_input("GitHub Link", key="github")
-    other_links = st.text_area("Other Links", key="other_links")
+# Required Fields Check Function
+def check_key_details():
+    return all([name, email, contact, company_name])
 
-    # Add Resume Headline and Profile Summary
-    st.subheader("Resume Headline & Profile Summary")
-    headline = st.text_input("Resume Headline (Optional)", key="headline")
-    profile_summary = st.text_area("Profile Summary (Optional)", key="profile_summary")
+# Upload Resume Section (Mandatory)
+st.markdown("## 📤 Upload Your Resume")
+uploaded_file = st.file_uploader(
+    "Upload your resume (DOCX or PDF)*",
+    type=["docx", "pdf"],
+    help="Upload your existing resume to generate a tailored version"
+)
 
+# Job Description Section (Mandatory)
+st.markdown("## 📋 Job Description")
+job_description = st.text_area(
+    "Paste the job description*",
+    height=200,
+    placeholder="Paste the job description here to generate a tailored resume and cover letter..."
+)
+
+# LaTeX Template Section
+st.markdown("## 📝 LaTeX Template")
+template = st.text_area(
+    "Paste the LaTeX template code (Required for Resume Generation)*",
+    height=200,
+    placeholder="Paste your LaTeX template here..."
+)
+
+# Enter Information Section
+st.markdown("## 📝 Additional Resume Information")
+if st.button("Enter Your Information", type="primary", use_container_width=True):
+    st.session_state.show_form = not st.session_state.show_form
+
+if st.session_state.show_form:
     # Experience Section
-    st.subheader("Experience")
-    if st.button("Add Experience", key="add_exp"):
+    st.markdown("### Experience")
+    if st.button("➕ Add Experience", key="add_exp"):
         st.session_state.experience_entries.append({
             'org_name': '',
+            'role': '',
             'start_date': None,
             'end_date': None,
-            'description': '',
-            'skills_learned': ''
+            'description': ''
         })
 
     for idx, exp in enumerate(st.session_state.experience_entries):
         with st.container():
-            st.write(f"Experience {idx + 1}")
-            exp['org_name'] = st.text_input(f"Organization Name", value=exp.get('org_name', ''), key=f"exp_org_{idx}")
-            exp['start_date'] = st.date_input(f"Start Date", value=exp.get('start_date', None), key=f"exp_start_{idx}")
-            exp['end_date'] = st.date_input(f"End Date", value=exp.get('end_date', None), key=f"exp_end_{idx}")
-            exp['description'] = st.text_area(f"Description", value=exp.get('description', ''), key=f"exp_desc_{idx}")
-            exp['skills_learned'] = st.text_area(f"Skills Learned", value=exp.get('skills_learned', ''), key=f"exp_skills_{idx}")
-            if st.button(f"Remove Experience {idx + 1}", key=f"remove_exp_{idx}"):
+            st.markdown(f"#### Experience {idx + 1}")
+            col1, col2 = st.columns(2)
+            with col1:
+                exp['org_name'] = st.text_input("Organization Name", key=f"exp_org_{idx}")
+                exp['role'] = st.text_input("Role", key=f"exp_role_{idx}")
+            with col2:
+                exp['start_date'] = st.date_input("Start Date", key=f"exp_start_{idx}")
+                exp['end_date'] = st.date_input("End Date", key=f"exp_end_{idx}")
+            exp['description'] = st.text_area("Description", key=f"exp_desc_{idx}")
+            if st.button("🗑️ Remove", key=f"remove_exp_{idx}"):
                 st.session_state.experience_entries.pop(idx)
                 st.rerun()
 
     # Education Section
-    st.subheader("Education")
-    if st.button("Add Education", key="add_edu"):
+    st.markdown("### Education")
+    if st.button("➕ Add Education", key="add_edu"):
         st.session_state.education_entries.append({
             'school_name': '',
+            'degree': '',
             'major': '',
             'start_date': None,
             'end_date': None,
-            'skills_learned': '',
-            'courses_taken': '',
-            'thesis': ''
+            'courses': []
         })
 
     for idx, edu in enumerate(st.session_state.education_entries):
         with st.container():
-            st.write(f"Education {idx + 1}")
-            edu['school_name'] = st.text_input(f"School Name", value=edu.get('school_name', ''), key=f"edu_school_{idx}")
-            edu['major'] = st.text_input(f"Major", value=edu.get('major', ''), key=f"edu_major_{idx}")
-            edu['start_date'] = st.date_input(f"Start Date", value=edu.get('start_date', None), key=f"edu_start_{idx}")
-            edu['end_date'] = st.date_input(f"End Date", value=edu.get('end_date', None), key=f"edu_end_{idx}")
-            edu['skills_learned'] = st.text_area(f"Skills Learned", value=edu.get('skills_learned', ''), key=f"edu_skills_{idx}")
-            edu['courses_taken'] = st.text_area(f"Courses Taken", value=edu.get('courses_taken', ''), key=f"edu_courses_{idx}")
-            edu['thesis'] = st.text_area(f"Thesis (if applicable)", value=edu.get('thesis', ''), key=f"edu_thesis_{idx}")
-            if st.button(f"Remove Education {idx + 1}", key=f"remove_edu_{idx}"):
+            st.markdown(f"#### Education {idx + 1}")
+            col1, col2 = st.columns(2)
+            with col1:
+                edu['school_name'] = st.text_input("School Name", key=f"edu_school_{idx}")
+                edu['degree'] = st.text_input("Degree", key=f"edu_degree_{idx}")
+            with col2:
+                edu['major'] = st.text_input("Major", key=f"edu_major_{idx}")
+                edu['start_date'] = st.date_input("Start Date", key=f"edu_start_{idx}")
+                edu['end_date'] = st.date_input("End Date", key=f"edu_end_{idx}")
+# Changes for Education Courses Section (around line 200-230)
+            # Courses subsection within Education
+            st.markdown("##### Courses")
+            if st.button("➕ Add Course", key=f"add_course_{idx}"):
+                if 'courses' not in edu:
+                    edu['courses'] = []
+                edu['courses'].append('')
+            
+            # Courses grid layout
+            courses_per_row = 2
+            for i in range(0, len(edu.get('courses', [])), courses_per_row):
+                cols = st.columns(courses_per_row)
+                for j in range(courses_per_row):
+                    course_idx = i + j
+                    if course_idx < len(edu['courses']):
+                        with cols[j]:
+                            col1, col2 = st.columns([4, 1])
+                            with col1:
+                                edu['courses'][course_idx] = st.text_input(
+                                    "Course Name",
+                                    value=edu['courses'][course_idx],
+                                    key=f"course_{idx}_{course_idx}",
+                                    placeholder="e.g., Machine Learning"
+                                )
+                            with col2:
+                                if st.button("🗑️", key=f"remove_course_{idx}_{course_idx}"):
+                                    edu['courses'].pop(course_idx)
+                                    st.rerun()
+            if st.button("🗑️ Remove Education", key=f"remove_edu_{idx}"):
                 st.session_state.education_entries.pop(idx)
                 st.rerun()
 
-    # Technical Skills Section
-    st.subheader("Technical Skills")
-    if st.button("Add Technical Skill", key="add_tech"):
-        st.session_state.technical_skills.append({
-            'skill_name': '',
-            'proficiency': 1
+    # Changes for Skills Section (around line 250-280 in your code)
+    st.markdown("### Skills")
+    if st.button("➕ Add Skill Category", use_container_width=True):
+        st.session_state.skills_entries.append({
+            'category': '',
+            'skills': []
         })
 
-    for idx, skill in enumerate(st.session_state.technical_skills):
+    for idx, skill_cat in enumerate(st.session_state.skills_entries):
         with st.container():
-            skill['skill_name'] = st.text_input(f"Skill Name", value=skill.get('skill_name', ''), key=f"tech_name_{idx}")
-            skill['proficiency'] = st.slider(f"Proficiency (1-5 Stars)", 1, 5, value=skill.get('proficiency', 1), key=f"tech_prof_{idx}")
-            if st.button(f"Remove Technical Skill {idx + 1}", key=f"remove_tech_{idx}"):
-                st.session_state.technical_skills.pop(idx)
-                st.rerun()
-
-    # Languages Section
-    st.subheader("Languages")
-    if st.button("Add Language", key="add_lang"):
-        st.session_state.languages.append({
-            'language_name': '',
-            'proficiency_level': 1
-        })
-
-    for idx, lang in enumerate(st.session_state.languages):
-        with st.container():
-            lang['language_name'] = st.text_input(f"Language", value=lang.get('language_name', ''), key=f"lang_name_{idx}")
-            lang['proficiency_level'] = st.slider(f"Proficiency (1-5 Stars)", 1, 5, value=lang.get('proficiency_level', 1), key=f"lang_prof_{idx}")
-            if st.button(f"Remove Language {idx + 1}", key=f"remove_lang_{idx}"):
-                st.session_state.languages.pop(idx)
-                st.rerun()
-
-    # Certifications Section
-    st.subheader("Certifications")
-    if st.button("Add Certification", key="add_cert"):
-        st.session_state.certifications.append({
-            'certification_name': '',
-            'duration': ''
-        })
-
-    for idx, cert in enumerate(st.session_state.certifications):
-        with st.container():
-            cert['certification_name'] = st.text_input(f"Certification Name", value=cert.get('certification_name', ''), key=f"cert_name_{idx}")
-            cert['duration'] = st.text_input(f"Duration", value=cert.get('duration', ''), key=f"cert_duration_{idx}")
-            if st.button(f"Remove Certification {idx + 1}", key=f"remove_cert_{idx}"):
-                st.session_state.certifications.pop(idx)
-                st.rerun()
-
-    # Hobbies and Interests
-    hobbies_interests = st.text_area("Hobbies and Interests", key="hobbies")
-
-    # Patents Section
-    st.subheader("Patents")
-    if st.button("Add Patent", key="add_patent"):
-        st.session_state.patents.append({
-            'patent_title': '',
-            'patent_date': None
-        })
-
-    for idx, patent in enumerate(st.session_state.patents):
-        with st.container():
-            patent['patent_title'] = st.text_input(f"Patent Title", value=patent.get('patent_title', ''), key=f"patent_title_{idx}")
-            patent['patent_date'] = st.date_input(f"Date/Expected Date", value=patent.get('patent_date', None), key=f"patent_date_{idx}")
-            if st.button(f"Remove Patent {idx + 1}", key=f"remove_patent_{idx}"):
-                st.session_state.patents.pop(idx)
-                st.rerun()
-
-    # Publications Section
-    st.subheader("Publications")
-    if st.button("Add Publication", key="add_pub"):
-        st.session_state.publications.append({
-            'publication_title': '',
-            'publication_date': None
-        })
-
-    for idx, pub in enumerate(st.session_state.publications):
-        with st.container():
-            pub['publication_title'] = st.text_input(f"Publication Title", value=pub.get('publication_title', ''), key=f"pub_title_{idx}")
-            pub['publication_date'] = st.date_input(f"Publication Date", value=pub.get('publication_date', None), key=f"pub_date_{idx}")
-            if st.button(f"Remove Publication {idx + 1}", key=f"remove_pub_{idx}"):
-                st.session_state.publications.pop(idx)
-                st.rerun()
-
-    # Download Information as DOCX
-    if st.button("Download Information as DOCX", key="download_docx"):
-        if not name or not contact or not email or not address:
-            st.error("Please fill in all required fields (Name, Contact, Email, Address).")
-        else:
-            # Generate file name
-            name_parts = name.split()
-            first_name = name_parts[0] if len(name_parts) > 0 else "NoName"
-            last_name = name_parts[1] if len(name_parts) > 1 else "NoLastName"
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            file_name = f"{first_name.lower()}_{last_name.lower()}_{current_date}.docx"
-
-            # Create and save document
-            doc = Document()
-            doc.add_heading('Resume Information', 0)
-
-            # Add all sections to document
-            # Personal Info
-            doc.add_heading('Personal Information', level=1)
-            doc.add_paragraph(f"Name: {name}")
-            doc.add_paragraph(f"Contact: {contact}")
-            doc.add_paragraph(f"Email: {email}")
-            doc.add_paragraph(f"Address: {address}")
-            doc.add_paragraph(f"LinkedIn: {linkedin}")
-            doc.add_paragraph(f"GitHub: {github}")
-            doc.add_paragraph(f"Other Links: {other_links}")
-
-            if headline:
-                doc.add_heading('Resume Headline', level=1)
-                doc.add_paragraph(headline)
-
-            if profile_summary:
-                doc.add_heading('Profile Summary', level=1)
-                doc.add_paragraph(profile_summary)
-
-            # Experience
-            if st.session_state.experience_entries:
-                doc.add_heading('Experience', level=1)
-                for exp in st.session_state.experience_entries:
-                    doc.add_paragraph(f"Organization: {exp['org_name']}")
-                    doc.add_paragraph(f"Start Date: {exp['start_date']}")
-                    doc.add_paragraph(f"End Date: {exp['end_date']}")
-                    doc.add_paragraph(f"Description: {exp['description']}")
-                    doc.add_paragraph(f"Skills Learned: {exp['skills_learned']}")
-
-            # Education
-            if st.session_state.education_entries:
-                doc.add_heading('Education', level=1)
-                for edu in st.session_state.education_entries:
-                    doc.add_paragraph(f"School: {edu['school_name']}")
-                    doc.add_paragraph(f"Major: {edu['major']}")
-                    doc.add_paragraph(f"Start Date: {edu['start_date']}")
-                    doc.add_paragraph(f"End Date: {edu['end_date']}")
-                    doc.add_paragraph(f"Skills Learned: {edu['skills_learned']}")
-                    doc.add_paragraph(f"Courses Taken: {edu['courses_taken']}")
-                    doc.add_paragraph(f"Thesis: {edu['thesis']}")
-
-            # Technical Skills
-            if st.session_state.technical_skills:
-                doc.add_heading('Technical Skills', level=1)
-                for skill in st.session_state.technical_skills:
-                    doc.add_paragraph(f"Skill: {skill['skill_name']}")
-                    doc.add_paragraph(f"Proficiency: {skill['proficiency']}")
-
-            # Languages
-            if st.session_state.languages:
-                doc.add_heading('Languages', level=1)
-                for lang in st.session_state.languages:
-                    doc.add_paragraph(f"Language: {lang['language_name']}")
-                    doc.add_paragraph(f"Proficiency: {lang['proficiency_level']}")
-
-            # Certifications
-            if st.session_state.certifications:
-                doc.add_heading('Certifications', level=1)
-                for cert in st.session_state.certifications:
-                    doc.add_paragraph(f"Certification: {cert['certification_name']}")
-                    doc.add_paragraph(f"Duration: {cert['duration']}")
-
-            # Patents
-            if st.session_state.patents:
-                doc.add_heading('Patents', level=1)
-                for patent in st.session_state.patents:
-                    doc.add_paragraph(f"Patent: {patent['patent_title']}")
-                    doc.add_paragraph(f"Patent Date: {patent['patent_date']}")
-
-            # Publications
-            if st.session_state.publications:
-                doc.add_heading('Publications', level=1)
-                for pub in st.session_state.publications:
-                    doc.add_paragraph(f"Publication: {pub['publication_title']}")
-                    doc.add_paragraph(f"Publication Date: {pub['publication_date']}")
-
-            # Hobbies and Interests
-            if hobbies_interests:
-                doc.add_heading('Hobbies and Interests', level=1)
-                doc.add_paragraph(hobbies_interests)
-
-            # Save and download
-            if not os.path.exists('downloads'):
-                os.makedirs('downloads')
+            col1, col2 = st.columns([2, 3])
+            with col1:
+                skill_cat['category'] = st.text_input(
+                    "Category Name",
+                    key=f"skill_cat_{idx}",
+                    placeholder="e.g., Programming Languages"
+                )
+            with col2:
+                if st.button("➕ Add Skill", key=f"add_skill_{idx}"):
+                    skill_cat['skills'].append('')
             
-            file_path = os.path.join('downloads', file_name)
-            doc.save(file_path)
+            # Skills grid layout
+            skills_per_row = 3
+            for i in range(0, len(skill_cat['skills']), skills_per_row):
+                cols = st.columns(skills_per_row)
+                for j in range(skills_per_row):
+                    skill_idx = i + j
+                    if skill_idx < len(skill_cat['skills']):
+                        with cols[j]:
+                            col1, col2 = st.columns([4, 1])
+                            with col1:
+                                skill_cat['skills'][skill_idx] = st.text_input(
+                                    "Skill",
+                                    value=skill_cat['skills'][skill_idx],
+                                    key=f"skill_{idx}_{skill_idx}",
+                                    placeholder="e.g., Python"
+                                )
+                            with col2:
+                                if st.button("🗑️", key=f"remove_skill_{idx}_{skill_idx}"):
+                                    skill_cat['skills'].pop(skill_idx)
+                                    st.rerun()
 
-            with open(file_path, 'rb') as file:
-                st.download_button("Download DOCX", file, file_name, use_container_width=True)
+            if st.button("🗑️ Remove Category", key=f"remove_skill_cat_{idx}"):
+                st.session_state.skills_entries.pop(idx)
+                st.rerun()
+            st.markdown("---")
 
-# Upload Word document section
-st.markdown("## Upload your information (Word document)")
-uploaded_file = st.file_uploader("Upload your information (Word document)", type="docx")
+    # Projects Section
+    st.markdown("### Projects")
+    if st.button("➕ Add Project"):
+        st.session_state.projects_entries.append({
+            'name': '',
+            'description': '',
+            'technologies': '',
+            'link': ''
+        })
 
-# Job description section
-st.markdown("## Paste the job description")
-job_description = st.text_area("Paste the job description")
+    for idx, project in enumerate(st.session_state.projects_entries):
+        with st.container():
+            st.markdown(f"#### Project {idx + 1}")
+            project['name'] = st.text_input("Project Name", key=f"proj_name_{idx}")
+            project['description'] = st.text_area("Description", key=f"proj_desc_{idx}")
+            project['technologies'] = st.text_input("Technologies Used", key=f"proj_tech_{idx}")
+            project['link'] = st.text_input("Project Link", key=f"proj_link_{idx}")
+            if st.button("🗑️ Remove Project", key=f"remove_proj_{idx}"):
+                st.session_state.projects_entries.pop(idx)
+                st.rerun()
 
-# LaTeX template section
-st.markdown("## Paste the LaTeX template code")
-template = st.text_area("Paste the LaTeX template code")
+# Changes for Patents Section (around line 300-320)
+    st.markdown("### Patents")
+    if st.button("➕ Add Patent", use_container_width=True):
+        st.session_state.patents_entries.append({
+            'title': '',
+            'number': '',
+            'date': None,
+            'description': ''
+        })
 
-# Generate Resume and Cover Letter
-if uploaded_file:
-    candidate_info = extract_candidate_info(uploaded_file)
+    for idx, patent in enumerate(st.session_state.patents_entries):
+        with st.container():
+            st.markdown(f"#### Patent {idx + 1}")
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                patent['title'] = st.text_input(
+                    "Patent Title",
+                    key=f"patent_title_{idx}",
+                    placeholder="Enter patent title"
+                )
+            with col2:
+                patent['number'] = st.text_input(
+                    "Patent Number",
+                    key=f"patent_num_{idx}",
+                    placeholder="e.g., US123456"
+                )
+            
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                patent['date'] = st.date_input("Filing Date", key=f"patent_date_{idx}")
+            with col2:
+                patent['description'] = st.text_area(
+                    "Description",
+                    key=f"patent_desc_{idx}",
+                    placeholder="Brief description of the patent",
+                    height=100
+                )
+            
+            st.button("🗑️ Remove Patent", key=f"remove_patent_{idx}", use_container_width=True)
+            st.markdown("---")
+
+# Changes for Publications Section (around line 330-350)
+    st.markdown("### Publications")
+    if st.button("➕ Add Publication", use_container_width=True):
+        st.session_state.publications_entries.append({
+            'title': '',
+            'authors': '',
+            'journal': '',
+            'year': '',
+            'link': ''
+        })
+
+    for idx, pub in enumerate(st.session_state.publications_entries):
+        with st.container():
+            st.markdown(f"#### Publication {idx + 1}")
+            pub['title'] = st.text_input(
+                "Publication Title",
+                key=f"pub_title_{idx}",
+                placeholder="Enter publication title"
+            )
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                pub['authors'] = st.text_input(
+                    "Authors",
+                    key=f"pub_authors_{idx}",
+                    placeholder="e.g., Smith, J., Johnson, M."
+                )
+            with col2:
+                pub['year'] = st.text_input(
+                    "Year",
+                    key=f"pub_year_{idx}",
+                    placeholder="e.g., 2023"
+                )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                pub['journal'] = st.text_input(
+                    "Journal/Conference",
+                    key=f"pub_journal_{idx}",
+                    placeholder="e.g., IEEE Transactions"
+                )
+            with col2:
+                pub['link'] = st.text_input(
+                    "Link",
+                    key=f"pub_link_{idx}",
+                    placeholder="DOI or URL"
+                )
+            
+            st.button("🗑️ Remove Publication", key=f"remove_pub_{idx}", use_container_width=True)
+            st.markdown("---")
+
+# Generate Resume and Cover Letter Section
+
+key_details_str = f'''
+key_details = {{
+    "name": "{name}",
+    "contact": "{contact}",
+    "email": "{email}",
+    "linkedin": "{linkedin}",
+    "github": "{github}",
+    "other_links": "{other_links}",
+    "company_name": "{company_name}"
+}}
+'''
+
+
+if not check_key_details():
+    st.error("Please fill in all required fields in the sidebar.")
+elif not uploaded_file:
+    st.error("Please upload your resume.")
+elif not job_description:
+    st.error("Please paste the job description.")
+else:
+    col1, col2 = st.columns(2)
     
-    if st.button("Generate Resume"):
-        resume = generate_resume(job_description, candidate_info, template)
-        st.text_area("Generated Resume (LaTeX)", value=resume, height=300)
-    
-    if st.button("Generate Cover Letter"):
-        cover_letter = generate_cover_letter(job_description, candidate_info)
-        st.text_area("Generated Cover Letter", value=cover_letter, height=300)
+    with col1:
+        if template:  # Only show resume generation if template is provided
+            if st.button("🎯 Generate Resume", type="primary", use_container_width=True):
+                candidate_info = extract_candidate_info(uploaded_file)
+                st.session_state.generated_resume = generate_resume(
+                    job_description=job_description,
+                    candidate_info=candidate_info,
+                    key_details=key_details_str,
+                    template=template
+                )
+            
+            if st.session_state.generated_resume:
+                # Display the generated resume in a text area
+                resume_output = st.text_area(
+                    "Generated Resume (LaTeX)",
+                    value=st.session_state.generated_resume,
+                    height=300
+                )
+                
+        else:
+            st.warning("Please provide a LaTeX template to generate the resume.")
+
+    with col2:
+        if st.button("✉️ Generate Cover Letter", type="primary", use_container_width=True):
+            candidate_info = extract_candidate_info(uploaded_file)
+            st.session_state.generated_cover_letter = generate_cover_letter(
+                job_description=job_description,
+                candidate_info=candidate_info,
+                key_details=key_details_str
+            )
+        
+        if st.session_state.generated_cover_letter:
+            # Display the generated cover letter in a text area
+            cover_letter_output = st.text_area(
+                "Generated Cover Letter",
+                value=st.session_state.generated_cover_letter,
+                height=300
+            )
+           
