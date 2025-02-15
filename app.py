@@ -5,10 +5,14 @@ from utils.document_parser import extract_candidate_info
 from resume_generator.resume_chain import generate_resume
 from resume_generator.cover_letter_chain import generate_cover_letter
 from docx import Document
+import docx
+from io import BytesIO
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+
 
 # Page configuration - MUST BE THE FIRST STREAMLIT COMMAND
 st.set_page_config(
-    page_title="Resume Generator",
+    page_title="Job Buddy",
     page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -68,7 +72,10 @@ with st.sidebar:
     name = st.text_input("Full Name*", key="name", placeholder="John Doe")
     email = st.text_input("Email Address*", key="email", placeholder="john@example.com")
     contact = st.text_input("Contact Number*", key="contact", placeholder="+1 (123) 456-7890")
-    
+    company_name = st.text_input("Target Company*", key="company_name", placeholder="Enter Here")
+    st.markdown("*Required fields")
+    st.markdown("---")
+
     st.markdown("### Professional Profiles")
     linkedin = st.text_input("LinkedIn Profile", key="linkedin", placeholder="linkedin.com/in/johndoe")
     github = st.text_input("GitHub Profile", key="github", placeholder="github.com/johndoe")
@@ -76,14 +83,12 @@ with st.sidebar:
                               placeholder="Portfolio, Blog, etc.",
                               height=100)
     
-    st.markdown("### Target Company")
-    company_name = st.text_input("Company Name*", key="company_name", placeholder="Target Company Inc.")
-    
+
     st.markdown("---")
     st.markdown("*Required fields")
 
 # Main content
-st.title('🚀 Resume and Cover Letter Generator')
+st.title('🚀 Job Buddy')
 st.markdown("Create your professional resume and cover letter tailored to your target job.")
 
 # Key details dictionary
@@ -100,6 +105,8 @@ key_details = {
 # Required Fields Check Function
 def check_key_details():
     return all([name, email, contact, company_name])
+def check_key_details_resume_download():
+    return all([name, email, contact])
 
 # Upload Resume Section (Mandatory)
 st.markdown("## 📤 Upload Your Resume")
@@ -318,7 +325,9 @@ if st.session_state.show_form:
                     height=100
                 )
             
-            st.button("🗑️ Remove Patent", key=f"remove_patent_{idx}", use_container_width=True)
+            if st.button("🗑️ Remove Patent", key=f"remove_patent_{idx}, use_container_width=True)"):
+                st.session_state.patents_entries.pop(idx)
+                st.rerun()
             st.markdown("---")
 
 # Changes for Publications Section (around line 330-350)
@@ -369,10 +378,116 @@ if st.session_state.show_form:
                     placeholder="DOI or URL"
                 )
             
-            st.button("🗑️ Remove Publication", key=f"remove_pub_{idx}", use_container_width=True)
+            if st.button("🗑️ Remove Publication", key=f"remove_pub_{idx}, use_container_width=True)"):
+                st.session_state.publications_entries.pop(idx)
+                st.rerun()
             st.markdown("---")
 
-# Generate Resume and Cover Letter Section
+
+
+def create_docx(key_details, experience_entries, education_entries, skills_entries, projects_entries, patents_entries, publications_entries, courses_entries):
+    doc = docx.Document()
+
+    # Title
+    title = doc.add_paragraph()
+    title_run = title.add_run(key_details['name'])
+    title_run.bold = True
+    title_run.font.size = docx.shared.Pt(24)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Contact Information
+    contact_info = doc.add_paragraph()
+    contact_info_run = contact_info.add_run(f"{key_details['email']} | {key_details['contact']}")
+    contact_info.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Professional Profiles
+    if key_details['linkedin'] or key_details['github'] or key_details['other_links']:
+        profiles = doc.add_paragraph()
+        if key_details['linkedin']:
+            profiles.add_run(f"LinkedIn: {key_details['linkedin']} | ")
+        if key_details['github']:
+            profiles.add_run(f"GitHub: {key_details['github']} | ")
+        if key_details['other_links']:
+            profiles.add_run(f"Other Links: {key_details['other_links']}")
+        profiles.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+
+    # Experience
+    if experience_entries:
+        doc.add_heading("Experience", level=2)
+        for exp in experience_entries:
+            doc.add_paragraph(f"{exp['role']} at {exp['org_name']}")
+            doc.add_paragraph(f"{exp['start_date'].strftime('%B %Y')} - {exp['end_date'].strftime('%B %Y') if exp['end_date'] else 'Present'}")
+            doc.add_paragraph(exp['description'])
+
+    # Education
+    if education_entries:
+        doc.add_heading("Education", level=2)
+        for edu in education_entries:
+            doc.add_paragraph(f"{edu['degree']} in {edu['major']} from {edu['school_name']}")
+            doc.add_paragraph(f"{edu['start_date'].strftime('%B %Y')} - {edu['end_date'].strftime('%B %Y') if edu['end_date'] else 'Present'}")
+            if 'courses' in edu and edu['courses']:
+                doc.add_paragraph("Relevant Coursework: " + ", ".join(edu['courses']))
+
+    # Skills
+    if skills_entries:
+        doc.add_heading("Skills", level=2)
+        for skill_cat in skills_entries:
+            doc.add_paragraph(skill_cat['category'], style='List Bullet')  # Use bullet points for categories
+            for skill in skill_cat['skills']:
+                doc.add_paragraph(skill, style='List Bullet')  # Use bullet points for skills
+
+    # Projects
+    if projects_entries:
+        doc.add_heading("Projects", level=2)
+        for project in projects_entries:
+            doc.add_paragraph(project['name'])
+            doc.add_paragraph(project['description'])
+            doc.add_paragraph(f"Technologies Used: {project['technologies']}")
+            if project['link']:
+                doc.add_paragraph(f"Link: {project['link']}")
+
+    # Patents
+    if patents_entries:
+        doc.add_heading("Patents", level=2)
+        for patent in patents_entries:
+            doc.add_paragraph(patent['title'])
+            doc.add_paragraph(f"Patent Number: {patent['number']}")
+            doc.add_paragraph(f"Filing Date: {patent['date'].strftime('%B %Y')}")
+            doc.add_paragraph(patent['description'])
+
+    # Publications
+    if publications_entries:
+        doc.add_heading("Publications", level=2)
+        for pub in publications_entries:
+            doc.add_paragraph(pub['title'])
+            doc.add_paragraph(f"Authors: {pub['authors']}")
+            doc.add_paragraph(f"Journal/Conference: {pub['journal']} ({pub['year']})")
+            if pub['link']:
+                doc.add_paragraph(f"Link: {pub['link']}")
+
+    # Save to BytesIO object
+    docx_file = BytesIO()
+    doc.save(docx_file)
+    docx_file.seek(0)
+    return docx_file
+
+# Download Button
+if st.button("Generate Information Document", use_container_width=True):
+    if check_key_details_resume_download():  # Check mandatory fields
+        docx_file = create_docx(key_details, st.session_state.experience_entries, st.session_state.education_entries, st.session_state.skills_entries, st.session_state.projects_entries, st.session_state.patents_entries, st.session_state.publications_entries, st.session_state.courses_entries)
+
+        # Create the filename
+        file_name = f"{key_details['name'].lower().replace(' ', '_')}_information.docx"  # Lowercase, replace spaces with underscores
+
+        st.download_button(
+            label="Download Resume",
+            data=docx_file,
+            file_name=file_name,  # Use the dynamically created filename
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    else:
+        st.error("Please fill all mandatory fields (Key Details) and add information using the buttons below before downloading.")
 
 key_details_str = f'''
 key_details = {{
