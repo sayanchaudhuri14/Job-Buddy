@@ -8,6 +8,7 @@ from docx import Document
 import docx
 from io import BytesIO
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from utils.latex_templates import get_all_templates
 
 
 # Page configuration - MUST BE THE FIRST STREAMLIT COMMAND
@@ -126,10 +127,32 @@ job_description = st.text_area(
 
 # LaTeX Template Section
 st.markdown("## 📝 LaTeX Template")
+
+# Import templates and get template names
+templates = get_all_templates()
+
+# Initialize template selection in session state if not exists
+if 'selected_template' not in st.session_state:
+    st.session_state.selected_template = None
+
+# Create columns for template previews
+cols = st.columns(3)  # Show 3 templates per row
+for idx, (template_name, template_content) in enumerate(templates.items()):
+    with cols[idx % 3]:
+        # Display template preview image
+        preview_path = f"utils/template_previews/{template_name}.png"
+        st.image(preview_path, caption=template_name, use_container_width=True)
+        
+        # Add select button below image
+        if st.button(f"Select {template_name}", key=f"select_{template_name}"):
+            st.session_state.selected_template = template_content
+            
+# Show selected template in text area
 template = st.text_area(
-    "Paste the LaTeX template code (Required for Resume Generation)*",
+    "Selected Template (LaTeX code)",
+    value=st.session_state.selected_template if st.session_state.selected_template else "",
     height=200,
-    placeholder="Paste your LaTeX template here..."
+    disabled=True  # Make it read-only since selection is done via buttons
 )
 
 # Enter Information Section
